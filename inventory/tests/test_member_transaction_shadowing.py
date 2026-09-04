@@ -6,9 +6,15 @@ from django.test import TestCase
 from django.urls import reverse
 
 from inventory.models import Member, MemberLevel, MemberTransaction, RechargeRecord
+from inventory.services.member_service import apply_member_balance_change
 
 
 class MemberBalanceTransactionTests(TestCase):
+    @staticmethod
+    def update_balance_then_fail(*args, **kwargs):
+        apply_member_balance_change(*args, **kwargs)
+        raise RuntimeError("synthetic failure after balance update")
+
     def setUp(self):
         self.user = User.objects.create_user(username="operator", password="secret")
         level = MemberLevel.objects.create(
@@ -59,7 +65,7 @@ class MemberBalanceTransactionTests(TestCase):
     def test_recharge_rolls_back_ledger_and_balance_on_failure(self):
         with patch(
             "inventory.views.member.member_service.apply_member_balance_change",
-            side_effect=RuntimeError("synthetic failure"),
+            side_effect=self.update_balance_then_fail,
         ):
             with self.assertRaises(RuntimeError):
                 self.client.post(
@@ -73,13 +79,14 @@ class MemberBalanceTransactionTests(TestCase):
 
         self.member.refresh_from_db()
         self.assertEqual(self.member.balance, Decimal("10.00"))
+        self.assertFalse(self.member.is_recharged)
         self.assertEqual(RechargeRecord.objects.count(), 0)
         self.assertEqual(MemberTransaction.objects.count(), 0)
 
     def test_balance_adjust_rolls_back_ledger_and_balance_on_failure(self):
         with patch(
             "inventory.views.member.member_service.apply_member_balance_change",
-            side_effect=RuntimeError("synthetic failure"),
+            side_effect=self.update_balance_then_fail,
         ):
             with self.assertRaises(RuntimeError):
                 self.client.post(
