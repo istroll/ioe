@@ -916,16 +916,19 @@ def birthday_members_report(request):
     # 即将到来的生日会员(7天内)
     today = timezone.now().date()
     upcoming_birthdays = []
+    upcoming_dates = {}
+    for days_ahead in range(8):
+        birthday_date = today + timedelta(days=days_ahead)
+        upcoming_dates[(birthday_date.month, birthday_date.day)] = birthday_date
     
     for member in members:
         if member.birthday:
-            # 计算今年的生日日期
-            current_year = today.year
-            birthday_this_year = date(current_year, member.birthday.month, member.birthday.day)
-            
-            # 如果今年的生日已经过了，计算明年的生日
-            if birthday_this_year < today:
-                birthday_this_year = date(current_year + 1, member.birthday.month, member.birthday.day)
+            # 仅匹配真实存在的日期，避免在平年构造 2 月 29 日。
+            birthday_this_year = upcoming_dates.get(
+                (member.birthday.month, member.birthday.day)
+            )
+            if birthday_this_year is None:
+                continue
             
             # 计算距离生日还有多少天
             days_until_birthday = (birthday_this_year - today).days
